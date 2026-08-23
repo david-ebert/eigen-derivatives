@@ -1,0 +1,17 @@
+# Python bytecode (compiled execution caches)
+__pycache__/
+*.py[cod]
+
+# Python packaging and distribution build artifacts
+build/
+dist/
+*.egg-info/
+
+# Testing and test coverage caches
+.pytest_cache/
+.coverage
+
+# IDE settings (optional, keeps your repository clean across editors)
+.idea/
+.vscode/
+.DS_Store
