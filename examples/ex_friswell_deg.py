@@ -48,9 +48,10 @@ if __name__ == '__main__':
     initial_polarization, polarization_order = ed.polarize(eigenvalue_derivatives)
 
     # derivatives of polarization
-    polarization_derivatives, polarized_eigenvalues_derivatives = ed.polarization_derivatives(
-        eigenvalue_derivatives, initial_polarization, polarization_order, eigenvector_derivatives
-    )
+    polarization_derivatives, polarized_eigenvalues_derivatives = ed.polarization_derivatives(eigenvalue_derivatives,
+                                                                                              eigenvector_derivatives,
+                                                                                              initial_polarization,
+                                                                                              polarization_order)
 
     print(f"Polarized eigenvalue derivatives:\n{polarized_eigenvalues_derivatives}\n")
     print(f"Approximation of polarization eigenvalues:\n{polarized_eigenvalues_derivatives.evaluate_taylor(dx = 1.)}\n")

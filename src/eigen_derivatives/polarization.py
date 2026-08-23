@@ -63,9 +63,9 @@ def polarize(
 
 def polarization_derivatives(
         eigenvalue_derivatives: DerivativesList,
+        eigenfunction_derivatives: DerivativesList,
         initial_polarization: np.ndarray,
         polarization_order: np.ndarray,
-        eigenfunctions: DerivativesList,
         mass_matrix: DerivativesList | None = None
 ) -> tuple[DerivativesList, DerivativesList]:
     """Calculates available polarized derivatives of dl and corresponding dQ natively."""
@@ -97,9 +97,9 @@ def polarization_derivatives(
 
     multiplicity = initial_polarization.shape[0]
     d = len(eigenvalue_derivatives)
-    dof = eigenfunctions.shape[0]
+    dof = eigenfunction_derivatives.shape[0]
 
-    is_sparse_type = sp.issparse(eigenfunctions[0])
+    is_sparse_type = sp.issparse(eigenfunction_derivatives[0])
     to_matrix, _, solve_func, _, make_eye = _get_numeric_backend(
         is_sparse_type
     )
@@ -173,9 +173,9 @@ def polarization_derivatives(
 
                         for coeff, ind in zip(mnc, multi_indices):
                             val_scalar = polarization_derivatives[ind[0]][:, i].T @ (
-                                    eigenfunctions[ind[1]] @ (
+                                    eigenfunction_derivatives[ind[1]] @ (
                                     mass_matrix[ind[2]] @ (
-                                    eigenfunctions[ind[3]]
+                                    eigenfunction_derivatives[ind[3]]
                                     @ polarization_derivatives[ind[4]][:, i])))
 
                             rhs[j] += (coeff / 2.0) * val_scalar
