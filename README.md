@@ -4,7 +4,7 @@ A Python package for computing higher-order derivatives of eigenvalues and eigen
 arrays and SciPy sparse matrices.
 
 This project is an optimized Python translation of original MATLAB library eigen_space:
-https://github.com/david-ebert/eigen_derivative
+https://github.com/david-ebert/eigen_derivatives
 
 ## Key Features
 
