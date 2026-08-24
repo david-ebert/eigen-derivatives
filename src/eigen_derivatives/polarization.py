@@ -209,8 +209,6 @@ def polarized_eigenvectors(
         du_pol = np.zeros(size_u)
 
         for coeff, ind in zip(mnc, multi_indices):
-            if ind[0] >= len(eigenvector_derivatives):
-                continue
 
             du_pol += coeff * (
                     eigenvector_derivatives[ind[0]]
