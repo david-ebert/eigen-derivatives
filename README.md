@@ -28,7 +28,13 @@ import numpy as np
 import eigen_derivatives as ed
 
 eigenvalues, eigenvectors = np.linalg.eigh(K0)
+# store matrix evaluation and derivatives
+K0 = np.array([[1, 0], [0, 2]])
+K1 = np.array([[0, 1], [1, 0]])
+K2 = np.zeros((2, 2))
 stiffness_derivatives = ed.DerivativesList([K0, K1, K2])
-
+# calculate the derivatives up to the order available according to the input
 dL, dQ = ed.eigenpair_derivatives(eigenvalues[0], eigenvectors[:,0:1], stiffness_derivatives)
 ```
+
+For a complete example see the example directory.
