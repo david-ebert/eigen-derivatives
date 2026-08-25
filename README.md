@@ -30,5 +30,5 @@ import eigen_derivatives as ed
 eigenvalues, eigenvectors = np.linalg.eigh(K0)
 stiffness_derivatives = ed.DerivativesList([K0, K1, K2])
 
-dL, dQ = ed.eigenpair_derivatives(eigenvalues[0], eigenvectors[:,0], stiffness_derivatives)
+dL, dQ = ed.eigenpair_derivatives(eigenvalues[0], eigenvectors[:,0:1], stiffness_derivatives)
 ```
