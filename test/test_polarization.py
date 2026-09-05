@@ -121,6 +121,22 @@ class TestUndeterminedEntries:
         for order in range(1, len(polarization_ds)):
             assert np.isnan(polarization_ds[order][:, not_separated]).all()
 
+    def test_exhaustion_keeps_the_orders_between_sibling_blocks(self):
+        eigenvalue_ds = DerivativeSeries((np.zeros((4, 4)), np.diag([1.0, 1.0, 2.0, 2.0])))
+        with pytest.warns(UserWarning, match="No more derivatives"):
+            _, polarization_order = polarize(eigenvalue_ds)
+
+        undetermined = np.array(
+            [
+                [True, True, False, False],
+                [True, True, False, False],
+                [False, False, True, True],
+                [False, False, True, True],
+            ]
+        )
+        assert np.array_equal(np.isinf(polarization_order), undetermined)
+        assert np.all(polarization_order[~undetermined] == 1.0)
+
     def test_everything_is_nan_when_the_derivatives_run_out(self):
         eigenvalue_ds = DerivativeSeries((np.zeros((2, 2)), np.eye(2)))
         eigenvector_ds = DerivativeSeries((np.eye(2), np.zeros((2, 2))))

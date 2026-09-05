@@ -32,6 +32,7 @@ def polarize(
     for i in range(np.max(group) + 1):
         mask = (group == i)
         if np.sum(mask) > 1:
+            mask_2d = np.ix_(mask, mask)
             if k < num_orders - 1:
                 derivatives_submatrix = [None] * num_orders
                 init_polarization_col = init_polarization[:, mask]
@@ -41,12 +42,10 @@ def polarize(
 
                 polarization_submatrix, polarization_order_sub = polarize(derivatives_submatrix, tol, k + 1)
 
-                mask_2d = np.ix_(mask, mask)
                 polarization_adjustment[mask_2d] = polarization_submatrix
                 polarization_order[mask_2d] = polarization_order_sub
             else:
-                polarization_order = np.full((n, n), np.inf)
-                break
+                polarization_order[mask_2d] = np.inf
 
     init_polarization = init_polarization @ polarization_adjustment
 
