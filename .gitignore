@@ -7,9 +7,15 @@ build/
 dist/
 *.egg-info/
 
-# Testing and test coverage caches
+# Testing, linting and type checking caches
 .pytest_cache/
 .coverage
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
 
 # IDE settings (optional, keeps your repository clean across editors)
 .idea/

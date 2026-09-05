@@ -5,20 +5,16 @@ import numpy as np
 import scipy.sparse as sp
 
 
-def _get_numeric_backend(is_sparse: bool):
-    """
-    Returns the appropriate function bindings and matrix factories
-    based on whether a sparse or dense backend is requested.
-    """
+def _get_numeric_backend(is_sparse: bool) -> tuple:
+    """Return the function bindings and matrix factories for a sparse or a dense backend."""
     if is_sparse:
         return (
             sp.csc_matrix,
             sp.bmat,
-            lambda system_matrix, rhs: sp.linalg.spsolve(system_matrix.tocsc(), rhs),
+            lambda system_matrix, rhs: sp.linalg.spsolve(system_matrix.tocsc(), rhs).reshape(np.shape(rhs)),
             lambda rows, cols: sp.csc_matrix((rows, cols)),
-            lambda dim: sp.eye(dim, format='csc')
+            lambda dim: sp.eye(dim, format="csc")
         )
-
 
     return (
         np.asarray,
@@ -30,7 +26,7 @@ def _get_numeric_backend(is_sparse: bool):
 
 
 def _multiindex_total_order(total_order: int, length: int) -> np.ndarray:
-    """All multi-indices of a specific length and order."""
+    """Return all multi-indices of a specific length and order."""
     if length <= 0:
         return np.empty((0, 0), dtype=int)
     if total_order < 0:
@@ -46,8 +42,8 @@ def _multiindex_total_order(total_order: int, length: int) -> np.ndarray:
     return np.array(indices, dtype=int)
 
 
-def _multinomial_coefficient(list_of_multi_indices) -> list[int]:
-    """Calculates multinomial coefficients."""
+def _multinomial_coefficient(list_of_multi_indices: np.ndarray) -> list[int]:
+    """Return the multinomial coefficients of the multi-indices."""
     multi_indices = np.asarray(list_of_multi_indices, dtype=int)
     if multi_indices.ndim == 1:
         multi_indices = multi_indices.reshape(1, -1)
@@ -60,8 +56,8 @@ def _multinomial_coefficient(list_of_multi_indices) -> list[int]:
     return coefficients
 
 
-def group_eigenspace(eigenvalues, tol: float = 1e-5) -> np.ndarray:
-    """Groups eigenvalues according to degeneracy."""
+def group_eigenspace(eigenvalues: np.ndarray, tol: float = 1e-5) -> np.ndarray:
+    """Group eigenvalues according to degeneracy."""
     eigenvalues = np.asarray(eigenvalues).flatten()
     if eigenvalues.size == 0:
         return np.array([], dtype=int)

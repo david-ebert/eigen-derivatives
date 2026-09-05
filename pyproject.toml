@@ -29,3 +29,6 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["eigen_derivatives*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
