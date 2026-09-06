@@ -22,7 +22,7 @@ class TestDerivativeSeries:
     TUPLE_SP = pytest.param((sp.eye(2, format='csc'), sp.csc_matrix((2, 2)), sp.csc_matrix((2, 2))), id="tuple scipy")
     INPUT_VARIANTS = [TUPLE_NP, LIST_NP, TUPLE_SP]
 
-    @pytest.mark.parametrize("l", INPUT_VARIANTS, ids=lambda val: val.__name__)
+    @pytest.mark.parametrize("l", INPUT_VARIANTS)
     def test_basic_construct_iter_get(self, l):
         ds = DerivativeSeries(l)
         for ref, element in zip(l, ds):
@@ -89,7 +89,7 @@ class TestDerivativeSeries:
         with pytest.raises(TypeError, match="same type"):
             DerivativeSeries((sp.eye(2, format="csc"), sp.csr_matrix((2, 2))))
 
-    @pytest.mark.parametrize("l", INPUT_VARIANTS, ids=lambda val: val.__name__)
+    @pytest.mark.parametrize("l", INPUT_VARIANTS)
     def test_pad_with_zeros_keeps_type_and_shape(self, l):
         padded = DerivativeSeries(l).pad_with_zeros(5)
         assert len(padded) == 6
@@ -115,6 +115,23 @@ class TestDerivativeSeries:
         ds = DerivativeSeries((np.array(3), np.array(5), np.array(7)))
         with pytest.raises(ValueError, match="use truncate"):
             ds.pad_with_zeros(1)
+
+    @pytest.mark.parametrize("sparse_format", ["csc", "csr"])
+    def test_evaluate_taylor_keeps_a_sparse_series_sparse(self, sparse_format):
+        size = 20
+        elements = (
+            sp.diags([np.full(size, 2.0), np.full(size - 1, -1.0)], [0, 1], format=sparse_format),
+            sp.diags([np.full(size, 0.5)], [0], format=sparse_format),
+            sp.diags([np.full(size - 2, 0.25)], [2], format=sparse_format),
+        )
+        ds = DerivativeSeries(elements)
+        result = ds.evaluate_taylor(0.1)
+
+        assert sp.issparse(result)
+        assert result.format == sparse_format
+        assert result.nnz < size * size
+        dense = DerivativeSeries(tuple(element.toarray() for element in elements)).evaluate_taylor(0.1)
+        assert np.allclose(result.toarray(), dense)
 
     def test_evaluate_taylor_never_returns_an_integer_dtype(self):
         ds = DerivativeSeries((np.eye(2, dtype=int), np.eye(2, dtype=int), np.eye(2, dtype=int)))

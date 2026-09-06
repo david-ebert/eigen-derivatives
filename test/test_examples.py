@@ -81,6 +81,54 @@ EXPECTED_ORDER = {
     "pair cross": (PAIR_CROSS, np.array([[2, 2, 1, 1], [2, 2, 1, 1], [1, 1, 2, 2], [1, 1, 2, 2]])),
 }
 
+# prime entries, so that no two contributions cancel each other by accident
+PRIMES_2 = np.array([[2.0, 3.0], [3.0, 5.0]])
+PRIMES_2B = np.array([[7.0, 11.0], [11.0, 13.0]])
+PRIMES_3 = np.array([[2.0, 3.0, 5.0], [3.0, 7.0, 11.0], [5.0, 11.0, 13.0]])
+PRIMES_3B = np.array([[17.0, 19.0, 23.0], [19.0, 29.0, 31.0], [23.0, 31.0, 37.0]])
+PRIMES_4 = np.array([
+    [2.0, 3.0, 5.0, 7.0], [3.0, 11.0, 13.0, 17.0], [5.0, 13.0, 19.0, 23.0], [7.0, 17.0, 23.0, 29.0]
+])
+PRIMES_4B = np.array([
+    [31.0, 37.0, 41.0, 43.0], [37.0, 47.0, 53.0, 59.0],
+    [41.0, 53.0, 61.0, 67.0], [43.0, 59.0, 67.0, 71.0]
+])
+
+CROSS_FRISWELL_FILLED = _example(
+    2, 2, 0.0, 0.0,
+    dxK=np.array([[1.0, 0.0], [0.0, -1.0]]), dyK=np.array([[0.0, 1.0], [1.0, 0.0]]),
+    dx2K=PRIMES_2, dy2K=PRIMES_2B, dx3K=PRIMES_2B, dy3K=PRIMES_2, dx4K=PRIMES_2, dy4K=PRIMES_2B,
+)
+DEFLECT_FILLED = _example(
+    2, 2, 0.0, 0.0,
+    dxK=_zeros(2), dyK=_zeros(2),
+    dx2K=np.array([[1.0, 0.0], [0.0, -1.0]]), dy2K=np.array([[0.0, 1.0], [1.0, 0.0]]),
+    dx3K=PRIMES_2, dy3K=PRIMES_2B, dx4K=PRIMES_2B, dy4K=PRIMES_2,
+)
+CROSS_DEFLECT_FILLED = _example(
+    3, 3, 0.0, 0.0,
+    dxK=np.ones((3, 3)), dyK=_zeros(3),
+    dx2K=2 * np.diag([0.0, 1.0, -1.0]), dy2K=2 * np.array([[0.0, 0, 0], [0, 0, 1], [0, 1, 0]]),
+    dx3K=6 * np.diag([0.0, 1.0, -1.0]), dy3K=6 * np.array([[0.0, 0, 0], [0, 0, 1], [0, 1, 0]]),
+    dx4K=PRIMES_3, dy4K=PRIMES_3B,
+)
+PAIR_CROSS_FILLED = _example(
+    4, 4, 0.0, 0.0,
+    dxK=np.array([[1.0, 1, 0, 0], [1, 1, 0, 0], [0, 0, 2, 0], [0, 0, 0, 0]]), dyK=_zeros(4),
+    dx2K=2 * np.array([[1.0, 1, 0, 0], [1, 1, 0, 0], [0, 0, 1, 1], [0, 0, 1, 1]]),
+    dy2K=2 * np.array([[0.0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]]),
+    dx3K=PRIMES_4, dy3K=PRIMES_4B, dx4K=PRIMES_4B, dy4K=PRIMES_4,
+)
+
+# the expected orders are those of the unfilled examples: filling derivatives above the
+# separation order must not move the splitting
+FILLED_ORDER = {
+    "cross friswell filled": (CROSS_FRISWELL_FILLED, EXPECTED_ORDER["cross friswell"][1]),
+    "deflect filled": (DEFLECT_FILLED, EXPECTED_ORDER["deflect"][1]),
+    "cross deflect filled": (CROSS_DEFLECT_FILLED, EXPECTED_ORDER["cross deflect"][1]),
+    "pair cross filled": (PAIR_CROSS_FILLED, EXPECTED_ORDER["pair cross"][1]),
+}
+
 
 def _highest_finite_order(series):
     return max(order for order in range(len(series)) if np.isfinite(series[order]).all())
@@ -164,14 +212,39 @@ class TestBranchIdentity:
         assert np.allclose(predicted_values, exact.eigenvalues[matched], atol=1e-4)
 
 
+
+class TestPopulatedHigherOrders:
+    """The same configurations, with the derivatives above the separation order filled in."""
+
+    @pytest.mark.parametrize("name", list(FILLED_ORDER))
+    def test_filling_the_higher_orders_leaves_the_splitting_untouched(self, name):
+        example, expected = FILLED_ORDER[name]
+        polarization_order, _, _, _, _ = _workflow(example)
+        assert np.array_equal(polarization_order, expected)
+
+    @pytest.mark.parametrize("name", list(FILLED_ORDER))
+    def test_taylor_converges_at_the_truncation_order(self, name):
+        example, _ = FILLED_ORDER[name]
+        _, polarized_eigenvalue_ds, along_path, n_ev, _ = _workflow(example)
+        errors = []
+        for step in (0.08, 0.04, 0.02):
+            approximation = np.sort(np.ravel(polarized_eigenvalue_ds.truncate(3).evaluate_taylor(step)))
+            exact = np.sort(np.linalg.eigvalsh(along_path(step)))[:n_ev]
+            errors.append(np.abs(approximation - exact).max())
+
+        assert min(errors) > 1e-12
+        rates = [np.log2(errors[i] / errors[i + 1]) for i in range(len(errors) - 1)]
+        assert all(abs(rate - 4.0) < 0.3 for rate in rates)
+
+
 class TestGeneralizedProblem:
-    stiffness = (2.0 * np.eye(2), np.array([[1.0, -1.0], [-1.0, -1.0]]), np.zeros((2, 2)))
+    stiffness = (2.0 * np.eye(2), np.array([[1.0, -1.0], [-1.0, -1.0]]), PRIMES_2)
     mass = (
         np.eye(2),
         np.array([[0.3, 0.1], [0.1, -0.2]]),
         np.array([[0.1, 0.05], [0.05, 0.1]]),
     )
-    steps = [0.2, 0.1, 0.05, 0.025]
+    steps = [0.1, 0.05, 0.025, 0.0125]
 
     def _at(self, coefficients, step):
         evaluation, first, second = coefficients

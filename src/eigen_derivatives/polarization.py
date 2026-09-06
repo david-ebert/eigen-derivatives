@@ -2,11 +2,11 @@ import warnings
 from typing import Any
 
 import numpy as np
-import scipy.sparse as sp
 
 from eigen_derivatives.derivative_series import DerivativeSeries
 from eigen_derivatives.utils import (
-    _multiindex_total_order, _multinomial_coefficient, group_eigenspace, _get_numeric_backend
+    _multiindex_total_order, _multinomial_coefficient, _validate_mass_series,
+    _with_coefficients, group_eigenspace
 )
 
 
@@ -77,8 +77,7 @@ def polarization_derivatives(
         multi_indices = _multiindex_total_order(k_p + k_ij, 2)
         multi_indices = multi_indices[multi_indices[:, 0] >= k_ij]
 
-        coefficients = _multinomial_coefficient(multi_indices)
-        for coeff, ind in zip(coefficients, multi_indices):
+        for coeff, ind in _with_coefficients(multi_indices):
             mat_diff = eigenvalue_ds[ind[0]] - polarized_eigenvalue_derivatives[ind[0]][i] * np.eye(multiplicity)
             accumulator += coeff * (
                     polarization_matrix_derivatives[0][:, j].T @ mat_diff
@@ -93,16 +92,12 @@ def polarization_derivatives(
 
     multiplicity = init_polarization.shape[0]
     num_orders = len(eigenvalue_ds)
-    dof = eigenvector_ds.shape[0]
 
-    is_sparse_type = sp.issparse(eigenvector_ds[0])
-    to_matrix, _, solve_func, _, make_eye = _get_numeric_backend(
-        is_sparse_type
-    )
-
-    if mass_mat_ds is None:
-        mass_mat_ds = DerivativeSeries((make_eye(dof),))
-    has_mass_matrix_derivatives = len(mass_mat_ds) > 1
+    # An omitted mass matrix stays omitted; building the identity would be dof by dof.
+    has_mass_matrix = mass_mat_ds is not None
+    if has_mass_matrix:
+        _validate_mass_series(mass_mat_ds, num_orders)
+    has_mass_matrix_derivatives = has_mass_matrix and len(mass_mat_ds) > 1
 
     polarization_matrix_derivatives = (
             [init_polarization] + [np.zeros((multiplicity, multiplicity)) for _ in range(num_orders - 1)]
@@ -131,15 +126,14 @@ def polarization_derivatives(
                 if k_ij < k_ii:
                     rhs[j] = _coefficient_builder(i, j, k_p, k_ij)
 
-            polarization_matrix_derivatives[k_p][:, i] = solve_func(lhs, rhs)
+            polarization_matrix_derivatives[k_p][:, i] = np.linalg.solve(lhs, rhs)
 
             rhs_vec = eigenvalue_ds[k_eigval] @ init_polarization[:, i]
             multi_indices = _multiindex_total_order(k_eigval, 2)
             multi_indices = multi_indices[
                 (multi_indices[:, 0] >= k_ii) & (multi_indices[:, 0] < k_eigval)
                 ]
-            coefficients = _multinomial_coefficient(multi_indices)
-            for coeff, ind in zip(coefficients, multi_indices):
+            for coeff, ind in _with_coefficients(multi_indices):
                 polarization_column = polarization_matrix_derivatives[ind[1]][:, i]
                 rhs_vec += coeff * (
                         eigenvalue_ds[ind[0]] @ polarization_column
@@ -160,18 +154,20 @@ def polarization_derivatives(
                         if not has_mass_matrix_derivatives:
                             mask_norm &= (multi_indices[:, 2] == 0)
                         multi_indices = multi_indices[mask_norm]
-                        coefficients = _multinomial_coefficient(multi_indices)
-
-                        for coeff, ind in zip(coefficients, multi_indices):
-                            val_scalar = polarization_matrix_derivatives[ind[0]][:, i].T @ (
-                                    eigenvector_ds[ind[1]] @ (
-                                    mass_mat_ds[ind[2]] @ (
+                        for coeff, ind in _with_coefficients(multi_indices):
+                            column = (
                                     eigenvector_ds[ind[3]]
-                                    @ polarization_matrix_derivatives[ind[4]][:, i])))
+                                    @ polarization_matrix_derivatives[ind[4]][:, i]
+                            )
+                            if has_mass_matrix:
+                                column = mass_mat_ds[ind[2]] @ column
+                            val_scalar = polarization_matrix_derivatives[ind[0]][:, i].T @ (
+                                    eigenvector_ds[ind[1]].T @ column
+                            )
 
                             rhs[j] += (coeff / 2.0) * val_scalar
 
-            polarization_matrix_derivatives[k_p][:, i] = solve_func(lhs, rhs)
+            polarization_matrix_derivatives[k_p][:, i] = np.linalg.solve(lhs, rhs)
             determined[k_p - 1, i] = True
 
     for order in range(1, num_orders):
@@ -197,10 +193,9 @@ def polarized_eigenvectors(
 
     for k in range(0, num_orders):
         multi_indices = _multiindex_total_order(k, 2)
-        coefficients = _multinomial_coefficient(multi_indices)
         polarized = np.zeros(eigenvector_shape)
 
-        for coeff, ind in zip(coefficients, multi_indices):
+        for coeff, ind in _with_coefficients(multi_indices):
             polarized += coeff * (eigenvector_ds[ind[0]] @ polarization_ds[ind[1]])
         polarized_list.append(polarized)
 

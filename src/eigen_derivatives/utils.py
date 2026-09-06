@@ -1,5 +1,5 @@
 import itertools
-import math
+from collections.abc import Iterator
 
 import numpy as np
 import scipy.sparse as sp
@@ -34,12 +34,13 @@ def _multiindex_total_order(total_order: int, length: int) -> np.ndarray:
     if length == 1:
         return np.array([[total_order]], dtype=int)
 
-    pools = [range(total_order + 1)] * length
-    indices = [
-        p for p in itertools.product(*pools)
-        if sum(p) == total_order
-    ]
-    return np.array(indices, dtype=int)
+    # stars and bars: a multi-index is a choice of length - 1 bar positions among the slots
+    slots = total_order + length - 1
+    bars = np.array(list(itertools.combinations(range(slots), length - 1)), dtype=int)
+    borders = np.concatenate(
+        [np.full((len(bars), 1), -1), bars, np.full((len(bars), 1), slots)], axis=1
+    )
+    return np.diff(borders, axis=1) - 1
 
 
 def _multinomial_coefficient(list_of_multi_indices: np.ndarray) -> list[int]:
@@ -47,13 +48,36 @@ def _multinomial_coefficient(list_of_multi_indices: np.ndarray) -> list[int]:
     multi_indices = np.asarray(list_of_multi_indices, dtype=int)
     if multi_indices.ndim == 1:
         multi_indices = multi_indices.reshape(1, -1)
+    if multi_indices.size == 0:
+        return []
+
+    # exact integer arithmetic, with the factorials tabulated once instead of per entry
+    factorials = [1]
+    for value in range(1, int(multi_indices.sum(axis=1).max()) + 1):
+        factorials.append(factorials[-1] * value)
 
     coefficients = []
-    for row in multi_indices:
-        n = int(np.sum(row))
-        denominator = math.prod(math.factorial(int(x)) for x in row)
-        coefficients.append(math.factorial(n) // denominator)
+    for row in multi_indices.tolist():
+        denominator = 1
+        for entry in row:
+            denominator *= factorials[entry]
+        coefficients.append(factorials[sum(row)] // denominator)
     return coefficients
+
+
+def _validate_mass_series(mass_mat_ds, num_orders: int) -> None:
+    """Reject a mass series that is neither constant nor as long as the stiffness series."""
+    if len(mass_mat_ds) not in (1, num_orders):
+        raise ValueError(
+            f"The mass series has {len(mass_mat_ds)} entries, expected 1 for a constant mass "
+            f"matrix or {num_orders} to match the stiffness series. "
+            f"Use pad_with_zeros({num_orders - 1}) to extend it."
+        )
+
+
+def _with_coefficients(multi_indices: np.ndarray) -> Iterator[tuple[int, np.ndarray]]:
+    """Pair every multi-index with its coefficient, so the two cannot fall out of step."""
+    return zip(_multinomial_coefficient(multi_indices), multi_indices)
 
 
 def group_eigenspace(eigenvalues: np.ndarray, tol: float = 1e-5) -> np.ndarray:

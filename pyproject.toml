@@ -7,7 +7,7 @@ name = "eigen-derivatives"
 version = "0.1.0"
 description = "Derivatives of eigenvalues and eigenvectors for dense and sparse matrices."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
 authors = [
     { name = "David Ebert", email = "ebert@ins.uni-bonn.de" }
@@ -17,9 +17,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Mathematics",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "numpy>=1.21.0",

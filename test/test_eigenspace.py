@@ -128,3 +128,33 @@ class TestMassMatrixPaths:
         result = eigenpair_derivatives(eigenvalue, eigenvector, stiffness_ds, mass_mat_ds)
         for reference_ds, result_ds in zip(reference, result, strict=True):
             assert all(np.allclose(a, b) for a, b in zip(reference_ds, result_ds, strict=True))
+
+class TestMassSeriesLength:
+    stiffness = DerivativeSeries((EVALUATION, FIRST_DERIVATIVE, SECOND_DERIVATIVE))
+    eigenvectors = np.eye(2)
+
+    def _run(self, mass_elements):
+        return eigenpair_derivatives(
+            1.0, self.eigenvectors, self.stiffness, DerivativeSeries(tuple(mass_elements))
+        )
+
+    def test_a_constant_mass_matrix_is_accepted(self):
+        eigenvalue_ds, _ = self._run([np.eye(2)])
+        assert len(eigenvalue_ds) == 3
+
+    def test_a_mass_series_as_long_as_the_stiffness_is_accepted(self):
+        eigenvalue_ds, _ = self._run([np.eye(2), np.zeros((2, 2)), np.zeros((2, 2))])
+        assert len(eigenvalue_ds) == 3
+
+    def test_a_shorter_mass_series_is_rejected_with_a_readable_message(self):
+        with pytest.raises(ValueError, match="expected 1 for a constant mass matrix or 3"):
+            self._run([np.eye(2), np.zeros((2, 2))])
+
+    def test_a_longer_mass_series_is_rejected(self):
+        with pytest.raises(ValueError, match="has 4 entries"):
+            self._run([np.eye(2)] + [np.zeros((2, 2))] * 3)
+
+    def test_the_message_names_the_padding_call(self):
+        with pytest.raises(ValueError, match=r"pad_with_zeros\(2\)"):
+            self._run([np.eye(2), np.zeros((2, 2))])
+
