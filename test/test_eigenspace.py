@@ -12,7 +12,7 @@ SECOND_DERIVATIVE = np.zeros((2, 2))
 def _stiffness(sparse: bool) -> DerivativeSeries:
     if sparse:
         return DerivativeSeries(
-            (sp.csc_matrix(EVALUATION), sp.csc_matrix(FIRST_DERIVATIVE), sp.csc_matrix(SECOND_DERIVATIVE))
+            (sp.csc_array(EVALUATION), sp.csc_array(FIRST_DERIVATIVE), sp.csc_array(SECOND_DERIVATIVE))
         )
     return DerivativeSeries((EVALUATION, FIRST_DERIVATIVE, SECOND_DERIVATIVE))
 

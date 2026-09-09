@@ -2,8 +2,10 @@ import math
 
 import numpy as np
 import pytest
+import scipy.sparse as sp
 
 from eigen_derivatives.utils import (
+    _bilinear_form,
     _multiindex_total_order,
     _multinomial_coefficient,
     _with_coefficients,
@@ -65,6 +67,57 @@ class TestMultinomialCoefficients:
         # 23! is the first factorial that float64 cannot represent exactly
         assert _multinomial_coefficient(np.array([[23, 1]])) == [24]
         assert _multinomial_coefficient(np.array([[12, 12]])) == [math.comb(24, 12)]
+
+
+class TestBilinearForm:
+    matrix = np.array([[2.0, 1.0], [1.0, 3.0]])
+
+    def test_it_matches_the_explicit_product_for_real_input(self):
+        left = np.array([1.0, 2.0])
+        right = np.array([3.0, -1.0])
+        assert _bilinear_form(left, right, middle=self.matrix) == pytest.approx(
+            left.T @ self.matrix @ right
+        )
+
+    def test_an_omitted_middle_stands_for_the_identity(self):
+        left = np.array([1.0, 2.0])
+        right = np.array([3.0, -1.0])
+        assert _bilinear_form(left, right) == pytest.approx(left @ right)
+        assert _bilinear_form(left, right) == pytest.approx(
+            _bilinear_form(left, right, middle=np.eye(2))
+        )
+
+    def test_it_conjugates_the_left_argument(self):
+        vector = np.array([1.0 + 2.0j, 3.0 - 1.0j])
+        norm_squared = _bilinear_form(vector, vector)
+        assert norm_squared.imag == pytest.approx(0.0)
+        assert norm_squared.real == pytest.approx(np.linalg.norm(vector) ** 2)
+
+    def test_a_hermitian_middle_gives_a_real_quadratic_form(self):
+        hermitian = np.array([[2.0, 1.0 + 1.0j], [1.0 - 1.0j, 3.0]])
+        vector = np.array([1.0 + 2.0j, 3.0 - 1.0j])
+        value = _bilinear_form(vector, vector, middle=hermitian)
+        assert value.imag == pytest.approx(0.0)
+
+    def test_it_works_on_blocks_and_returns_a_matrix(self):
+        left = np.arange(6.0).reshape(3, 2)
+        right = np.arange(6.0, 12.0).reshape(3, 2)
+        middle = np.eye(3) * 2.0
+        result = _bilinear_form(left, right, middle=middle)
+        assert result.shape == (2, 2)
+        assert np.allclose(result, left.T @ middle @ right)
+
+    def test_a_sparse_middle_is_accepted(self):
+        left = np.arange(6.0).reshape(3, 2)
+        right = np.arange(6.0, 12.0).reshape(3, 2)
+        middle = sp.diags_array([1.0, 2.0, 3.0], format="csc")
+        result = _bilinear_form(left, right, middle=middle)
+        assert np.allclose(result, left.T @ middle.toarray() @ right)
+
+    def test_the_middle_is_keyword_only(self):
+        left = np.array([1.0, 2.0])
+        with pytest.raises(TypeError):
+            _bilinear_form(left, left, self.matrix)
 
 
 class TestWithCoefficients:

@@ -1,8 +1,10 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Any, NoReturn, Self
 
 import numpy as np
+
+from eigen_derivatives._types import Matrix
 
 
 @dataclass(frozen=True, eq=False, slots=True)
@@ -10,7 +12,7 @@ class DerivativeSeries:
     """
     Container class for storing and evaluating function derivatives.
 
-    Designed to handle sequences of NumPy arrays and SciPy sparse matrices with initial element being the function
+    Designed to handle sequences of NumPy arrays and SciPy sparse arrays with initial element being the function
     evaluation and the following its derivatives at the same parameter point.
 
     The container itself is immutable: neither the tuple nor the attribute can be
@@ -18,7 +20,7 @@ class DerivativeSeries:
     in place is possible and remains the caller's responsibility.
     """
 
-    derivatives: tuple[Any, ...]
+    derivatives: tuple[Matrix, ...]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "derivatives", tuple(self.derivatives))
@@ -28,7 +30,7 @@ class DerivativeSeries:
 
         first_elem = self.derivatives[0]
         if not hasattr(first_elem, "shape") or not hasattr(first_elem, "ndim"):
-            raise TypeError("Elements must be NumPy arrays or SciPy sparse matrices.")
+            raise TypeError("Elements must be NumPy arrays or SciPy sparse arrays.")
 
         if any(type(elem) is not type(first_elem) for elem in self.derivatives):
             found = sorted({type(elem).__name__ for elem in self.derivatives})
@@ -41,6 +43,11 @@ class DerivativeSeries:
     def shape(self) -> tuple[int, ...]:
         """Return the shape shared by the evaluation and all derivatives."""
         return self.derivatives[0].shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        """Return the dtype that the evaluation and all derivatives promote to."""
+        return np.result_type(*(elem.dtype for elem in self.derivatives))
 
     def truncate(self, max_order: int) -> Self:
         """Return a new series with the evaluation and the derivatives up to max_order."""
@@ -64,7 +71,7 @@ class DerivativeSeries:
             )
         return type(self)(self.derivatives + tuple(self._zero() for _ in range(max_order + 1 - len(self))))
 
-    def _zero(self) -> Any:
+    def _zero(self) -> Matrix:
         first_elem = self.derivatives[0]
         if hasattr(first_elem, "eliminate_zeros"):
             zero = first_elem * 0
@@ -75,13 +82,13 @@ class DerivativeSeries:
     def __len__(self) -> int:
         return len(self.derivatives)
 
-    def __getitem__(self, item: int) -> Any:
+    def __getitem__(self, item: int) -> Matrix:
         return self.derivatives[item]
 
-    def __iter__(self) -> Iterator[Any]:
+    def __iter__(self) -> Iterator[Matrix]:
         return iter(self.derivatives)
 
-    def __array__(self, dtype: Any = None, copy: bool | None = None) -> Any:
+    def __array__(self, dtype: Any = None, copy: bool | None = None) -> NoReturn:
         raise TypeError("DerivativeSeries is not an array. Index it first, e.g. series[k].")
 
     def __repr__(self) -> str:
@@ -99,10 +106,10 @@ class DerivativeSeries:
 
         return "\n".join(lines)
 
-    def evaluate_taylor(self, dx: float) -> Any:
+    def evaluate_taylor(self, dx: complex) -> Matrix:
         max_order = len(self) - 1
-        dtype = np.result_type(*(elem.dtype for elem in self.derivatives), 1.0, dx)
-        accumulator = self.derivatives[max_order].astype(dtype)  # astype copies
+        dtype = np.result_type(self.dtype, 1.0, dx)
+        accumulator: Matrix = self.derivatives[max_order].astype(dtype)  # astype copies
 
         for order in range(max_order - 1, -1, -1):
             accumulator *= dx / (order + 1)

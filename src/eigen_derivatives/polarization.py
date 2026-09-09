@@ -1,18 +1,18 @@
 import warnings
-from typing import Any
 
 import numpy as np
 
+from eigen_derivatives._types import Matrix
 from eigen_derivatives.derivative_series import DerivativeSeries
 from eigen_derivatives.utils import (
-    _multiindex_total_order, _multinomial_coefficient, _validate_mass_series,
+    _bilinear_form, _multiindex_total_order, _multinomial_coefficient, _validate_mass_series,
     _with_coefficients, group_eigenspace
 )
 
 
 def polarize(
-        eigenvalue_ds: DerivativeSeries | list[Any],
-        tol: float = 1e-10,
+        eigenvalue_ds: DerivativeSeries | list[Matrix | None], *,
+        tol: float = 1e-5,
         k: int = 1
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the initial polarization and the order at which each pair of eigenvalues separates.
@@ -26,7 +26,7 @@ def polarize(
     polarization_order = np.ones((n, n), dtype=np.float64) * k
     eigh_res = np.linalg.eigh(eigenvalue_ds[k])
     split_eigenvalues, init_polarization = eigh_res.eigenvalues, eigh_res.eigenvectors
-    group = group_eigenspace(split_eigenvalues, tol)
+    group = group_eigenspace(split_eigenvalues, tol=tol)
     polarization_adjustment = np.eye(n, dtype=float)
 
     for i in range(np.max(group) + 1):
@@ -38,9 +38,11 @@ def polarize(
                 init_polarization_col = init_polarization[:, mask]
 
                 for j in range(k + 1, num_orders):
-                    derivatives_submatrix[j] = init_polarization_col.T @ eigenvalue_ds[j] @ init_polarization_col
+                    derivatives_submatrix[j] = _bilinear_form(
+                        init_polarization_col, init_polarization_col, middle=eigenvalue_ds[j]
+                    )
 
-                polarization_submatrix, polarization_order_sub = polarize(derivatives_submatrix, tol, k + 1)
+                polarization_submatrix, polarization_order_sub = polarize(derivatives_submatrix, tol=tol, k=k + 1)
 
                 polarization_adjustment[mask_2d] = polarization_submatrix
                 polarization_order[mask_2d] = polarization_order_sub
@@ -79,9 +81,10 @@ def polarization_derivatives(
 
         for coeff, ind in _with_coefficients(multi_indices):
             mat_diff = eigenvalue_ds[ind[0]] - polarized_eigenvalue_derivatives[ind[0]][i] * np.eye(multiplicity)
-            accumulator += coeff * (
-                    polarization_matrix_derivatives[0][:, j].T @ mat_diff
-                    @ polarization_matrix_derivatives[ind[1]][:, i]
+            accumulator += coeff * _bilinear_form(
+                polarization_matrix_derivatives[0][:, j],
+                polarization_matrix_derivatives[ind[1]][:, i],
+                middle=mat_diff,
             )
 
         denom_coeff = np.asarray(_multinomial_coefficient(np.array([k_ij, k_p]))).item()
@@ -107,13 +110,14 @@ def polarization_derivatives(
     )
     determined = np.zeros((num_orders - 1, multiplicity), dtype=bool)
 
-    lhs = -init_polarization.T
+    lhs = -init_polarization.conj().T
 
     for k_eigval in range(1, num_orders):
         for i in range(multiplicity):
             if k_eigval <= polarization_order[i, i]:
-                polarized_eigenvalue_derivatives[k_eigval][i] = (
-                        init_polarization[:, i].T @ eigenvalue_ds[k_eigval] @ init_polarization[:, i]
+                polarized_eigenvalue_derivatives[k_eigval][i] = _bilinear_form(
+                    init_polarization[:, i], init_polarization[:, i],
+                    middle=eigenvalue_ds[k_eigval],
                 )
                 continue
 
@@ -128,7 +132,7 @@ def polarization_derivatives(
 
             polarization_matrix_derivatives[k_p][:, i] = np.linalg.solve(lhs, rhs)
 
-            rhs_vec = eigenvalue_ds[k_eigval] @ init_polarization[:, i]
+            rhs_vec: np.ndarray = eigenvalue_ds[k_eigval] @ init_polarization[:, i]
             multi_indices = _multiindex_total_order(k_eigval, 2)
             multi_indices = multi_indices[
                 (multi_indices[:, 0] >= k_ii) & (multi_indices[:, 0] < k_eigval)
@@ -140,7 +144,7 @@ def polarization_derivatives(
                         - polarization_column * polarized_eigenvalue_derivatives[ind[0]][i]
                 )
 
-            polarized_eigenvalue_derivatives[k_eigval][i] = init_polarization[:, i].T @ rhs_vec
+            polarized_eigenvalue_derivatives[k_eigval][i] = _bilinear_form(init_polarization[:, i], rhs_vec)
 
             rhs = np.zeros(multiplicity)
             for j in range(multiplicity):
@@ -155,17 +159,17 @@ def polarization_derivatives(
                             mask_norm &= (multi_indices[:, 2] == 0)
                         multi_indices = multi_indices[mask_norm]
                         for coeff, ind in _with_coefficients(multi_indices):
-                            column = (
+                            right = (
                                     eigenvector_ds[ind[3]]
                                     @ polarization_matrix_derivatives[ind[4]][:, i]
                             )
-                            if has_mass_matrix:
-                                column = mass_mat_ds[ind[2]] @ column
-                            val_scalar = polarization_matrix_derivatives[ind[0]][:, i].T @ (
-                                    eigenvector_ds[ind[1]].T @ column
+                            inner = _bilinear_form(
+                                eigenvector_ds[ind[1]], right,
+                                middle=mass_mat_ds[ind[2]] if has_mass_matrix else None,
                             )
-
-                            rhs[j] += (coeff / 2.0) * val_scalar
+                            rhs[j] += (coeff / 2.0) * _bilinear_form(
+                                polarization_matrix_derivatives[ind[0]][:, i], inner
+                            )
 
             polarization_matrix_derivatives[k_p][:, i] = np.linalg.solve(lhs, rhs)
             determined[k_p - 1, i] = True

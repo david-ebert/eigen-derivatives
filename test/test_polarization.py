@@ -22,7 +22,7 @@ EXACT_EIGENVALUES = np.array([2.0 - np.sqrt(2.0), 2.0 + np.sqrt(2.0)])
 def _stiffness(sparse: bool) -> DerivativeSeries:
     if sparse:
         return DerivativeSeries(
-            (sp.csc_matrix(EVALUATION), sp.csc_matrix(FIRST_DERIVATIVE), sp.csc_matrix(SECOND_DERIVATIVE))
+            (sp.csc_array(EVALUATION), sp.csc_array(FIRST_DERIVATIVE), sp.csc_array(SECOND_DERIVATIVE))
         )
     return DerivativeSeries((EVALUATION, FIRST_DERIVATIVE, SECOND_DERIVATIVE))
 
@@ -246,9 +246,9 @@ class TestMoreDofsThanMultiplicity:
         dof = 1500
         diagonal = np.concatenate(([1.0, 1.0], np.arange(3.0, dof + 1.0)))
         stiffness_ds = DerivativeSeries((
-            sp.diags(diagonal, format="csc"),
-            sp.diags(np.concatenate(([1.0, -1.0], np.zeros(dof - 2))), format="csc"),
-            sp.diags(np.concatenate(([0.5, 0.2], np.zeros(dof - 2))), format="csc"),
+            sp.diags_array(diagonal, format="csc"),
+            sp.diags_array(np.concatenate(([1.0, -1.0], np.zeros(dof - 2))), format="csc"),
+            sp.diags_array(np.concatenate(([0.5, 0.2], np.zeros(dof - 2))), format="csc"),
         ))
         initial_eigenvectors = np.zeros((dof, 2))
         initial_eigenvectors[0, 0] = 1.0
@@ -278,7 +278,7 @@ class TestMoreDofsThanMultiplicity:
             )
 
         dense_ds, dense_eigenvalues = run(mass_elements)
-        sparse_ds, sparse_eigenvalues = run([sp.csc_matrix(mass) for mass in mass_elements])
+        sparse_ds, sparse_eigenvalues = run([sp.csc_array(mass) for mass in mass_elements])
 
         for dense, sparse in zip(dense_ds, sparse_ds, strict=True):
             assert np.allclose(dense, sparse, equal_nan=True)

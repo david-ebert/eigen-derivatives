@@ -4,16 +4,18 @@ from collections.abc import Iterator
 import numpy as np
 import scipy.sparse as sp
 
+from eigen_derivatives._types import Matrix
+
 
 def _get_numeric_backend(is_sparse: bool) -> tuple:
     """Return the function bindings and matrix factories for a sparse or a dense backend."""
     if is_sparse:
         return (
-            sp.csc_matrix,
-            sp.bmat,
+            sp.csc_array,
+            sp.block_array,
             lambda system_matrix, rhs: sp.linalg.spsolve(system_matrix.tocsc(), rhs).reshape(np.shape(rhs)),
-            lambda rows, cols: sp.csc_matrix((rows, cols)),
-            lambda dim: sp.eye(dim, format="csc")
+            lambda rows, cols: sp.csc_array((rows, cols)),
+            lambda dim: sp.eye_array(dim, format="csc")
         )
 
     return (
@@ -75,12 +77,24 @@ def _validate_mass_series(mass_mat_ds, num_orders: int) -> None:
         )
 
 
+def _bilinear_form(
+        left: np.ndarray,
+        right: np.ndarray,
+        *,
+        middle: Matrix | None = None
+) -> np.ndarray | np.generic:
+    """Return left^H @ middle @ right, with middle None standing for the identity."""
+    if middle is None:
+        return left.conj().T @ right
+    return left.conj().T @ (middle @ right)
+
+
 def _with_coefficients(multi_indices: np.ndarray) -> Iterator[tuple[int, np.ndarray]]:
     """Pair every multi-index with its coefficient, so the two cannot fall out of step."""
     return zip(_multinomial_coefficient(multi_indices), multi_indices)
 
 
-def group_eigenspace(eigenvalues: np.ndarray, tol: float = 1e-5) -> np.ndarray:
+def group_eigenspace(eigenvalues: np.ndarray, *, tol: float = 1e-5) -> np.ndarray:
     """Group eigenvalues according to degeneracy."""
     eigenvalues = np.asarray(eigenvalues).flatten()
     if eigenvalues.size == 0:

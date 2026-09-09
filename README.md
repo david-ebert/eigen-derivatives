@@ -1,7 +1,7 @@
 # eigen-derivatives
 
 A Python package for computing higher-order derivatives of eigenvalues and eigenvectors, supporting both dense NumPy
-arrays and SciPy sparse matrices.
+arrays and SciPy sparse arrays.
 
 This project is an optimized Python translation of the original MATLAB library `eigen_derivatives`:
 https://github.com/david-ebert/eigen_derivatives
@@ -14,7 +14,7 @@ https://github.com/david-ebert/eigen_derivatives
   - polarization matrix and derivatives for degenerate eigenpairs
 - `DerivativeSeries` container object for passing of Sequences of Derivatives and efficient Taylor approximation via
   Horner, with `truncate` and `pad_with_zeros` to adjust the highest order
-- Handles NumPy and SciPy matrices. The derivatives are always returned as dense NumPy arrays, regardless of the input type, since the eigenvector derivatives of a sparse matrix are generally dense.
+- Handles NumPy arrays and SciPy sparse arrays. The derivatives are always returned as dense NumPy arrays, regardless of the input type, since the eigenvector derivatives of a sparse matrix are generally dense.
 
 ## Installation
 

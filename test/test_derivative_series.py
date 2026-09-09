@@ -19,7 +19,7 @@ def _is_equal(x, ref) -> bool:
 class TestDerivativeSeries:
     TUPLE_NP = pytest.param((np.eye(2), np.zeros((2, 2)), np.zeros((2, 2))), id="tuple numpy")
     LIST_NP = pytest.param([np.eye(2), np.zeros((2, 2)), np.zeros((2, 2))], id="list numpy")
-    TUPLE_SP = pytest.param((sp.eye(2, format='csc'), sp.csc_matrix((2, 2)), sp.csc_matrix((2, 2))), id="tuple scipy")
+    TUPLE_SP = pytest.param((sp.eye_array(2, format='csc'), sp.csc_array((2, 2)), sp.csc_array((2, 2))), id="tuple scipy")
     INPUT_VARIANTS = [TUPLE_NP, LIST_NP, TUPLE_SP]
 
     @pytest.mark.parametrize("l", INPUT_VARIANTS)
@@ -85,9 +85,9 @@ class TestDerivativeSeries:
 
     def test_raises_on_mixed_element_types(self):
         with pytest.raises(TypeError, match="same type"):
-            DerivativeSeries((sp.eye(2, format="csc"), np.zeros((2, 2))))
+            DerivativeSeries((sp.eye_array(2, format="csc"), np.zeros((2, 2))))
         with pytest.raises(TypeError, match="same type"):
-            DerivativeSeries((sp.eye(2, format="csc"), sp.csr_matrix((2, 2))))
+            DerivativeSeries((sp.eye_array(2, format="csc"), sp.csr_array((2, 2))))
 
     @pytest.mark.parametrize("l", INPUT_VARIANTS)
     def test_pad_with_zeros_keeps_type_and_shape(self, l):
@@ -103,7 +103,7 @@ class TestDerivativeSeries:
         assert padded[2] is not padded[3]
 
     def test_pad_with_zeros_keeps_sparse_sparse(self):
-        padded = DerivativeSeries((sp.eye(2, format="csc"),)).pad_with_zeros(2)
+        padded = DerivativeSeries((sp.eye_array(2, format="csc"),)).pad_with_zeros(2)
         assert all(sp.issparse(element) for element in padded)
         assert padded[2].nnz == 0
 
@@ -120,9 +120,9 @@ class TestDerivativeSeries:
     def test_evaluate_taylor_keeps_a_sparse_series_sparse(self, sparse_format):
         size = 20
         elements = (
-            sp.diags([np.full(size, 2.0), np.full(size - 1, -1.0)], [0, 1], format=sparse_format),
-            sp.diags([np.full(size, 0.5)], [0], format=sparse_format),
-            sp.diags([np.full(size - 2, 0.25)], [2], format=sparse_format),
+            sp.diags_array([np.full(size, 2.0), np.full(size - 1, -1.0)], offsets=[0, 1], format=sparse_format),
+            sp.diags_array([np.full(size, 0.5)], offsets=[0], format=sparse_format),
+            sp.diags_array([np.full(size - 2, 0.25)], offsets=[2], format=sparse_format),
         )
         ds = DerivativeSeries(elements)
         result = ds.evaluate_taylor(0.1)
@@ -149,3 +149,31 @@ class TestDerivativeSeries:
     def test_evaluate_taylor_promotes_a_complex_step(self):
         ds = DerivativeSeries((np.eye(2), np.eye(2), np.eye(2)))
         assert ds.evaluate_taylor(0.5j).dtype == np.complex128
+
+    def test_dtype_reports_the_shared_dtype(self):
+        ds = DerivativeSeries((np.eye(2, dtype=np.float32),) * 3)
+        assert ds.dtype == np.float32
+
+    def test_dtype_promotes_a_mixed_series(self):
+        ds = DerivativeSeries((np.eye(2, dtype=np.float32), np.eye(2), np.eye(2, dtype=np.float32)))
+        assert ds.dtype == np.float64
+        ds = DerivativeSeries((np.eye(2), np.eye(2) * 1j, np.eye(2)))
+        assert ds.dtype == np.complex128
+
+    def test_dtype_leaves_an_integer_series_integer(self):
+        # promoting to float is the caller's decision, the property only reports
+        ds = DerivativeSeries((np.eye(2, dtype=int),) * 2)
+        assert np.issubdtype(ds.dtype, np.integer)
+
+    def test_dtype_works_on_a_sparse_series(self):
+        ds = DerivativeSeries((sp.eye_array(2, format="csc", dtype=np.complex128), sp.csc_array((2, 2))))
+        assert ds.dtype == np.complex128
+
+    def test_dtype_matches_the_element_dtypes_of_the_evaluation(self):
+        ds = DerivativeSeries((np.eye(2), np.eye(2) * 1j, np.eye(2)))
+        assert ds.evaluate_taylor(0.5).dtype == ds.dtype
+
+    def test_dtype_survives_truncate_and_pad(self):
+        ds = DerivativeSeries((np.eye(2, dtype=np.float32),) * 3)
+        assert ds.truncate(1).dtype == np.float32
+        assert ds.pad_with_zeros(5).dtype == np.float32

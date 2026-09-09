@@ -3,7 +3,7 @@ import scipy.sparse as sp
 
 from eigen_derivatives.derivative_series import DerivativeSeries
 from eigen_derivatives.utils import (
-    _multiindex_total_order, _validate_mass_series, _with_coefficients, _get_numeric_backend
+    _bilinear_form, _multiindex_total_order, _validate_mass_series, _with_coefficients, _get_numeric_backend
 )
 
 
@@ -40,21 +40,21 @@ def eigenpair_derivatives(
 
     system_matrix = block_func([
         [northwest_tile, northeast_tile],
-        [northeast_tile.T, zero_block]
+        [northeast_tile.conj().T, zero_block]
     ])
 
     for k in range(1, num_orders):
-        diagonal_term_vec = np.zeros(multiplicity)
+        diagonal = np.zeros(multiplicity)
         multi_indices = _multiindex_total_order(k, 3)
         multi_indices = multi_indices[(multi_indices[:, 0] < k) & (multi_indices[:, 2] < k)]
         if not has_mass_matrix_derivatives:
             multi_indices = multi_indices[multi_indices[:, 1] == 0]
         for coeff, ind in _with_coefficients(multi_indices):
-            gram_block = eigenvector_derivatives[ind[0]].T @ (mass_mat_ds[ind[1]] @ eigenvector_derivatives[ind[2]])
-            diagonal_contribution = np.ravel(gram_block.diagonal())
-            diagonal_term_vec += (coeff / 2.0) * diagonal_contribution
-
-        diagonal_term = np.diag(diagonal_term_vec)
+            normalization = _bilinear_form(
+                eigenvector_derivatives[ind[0]], eigenvector_derivatives[ind[2]],
+                middle=mass_mat_ds[ind[1]],
+            )
+            diagonal += (coeff / 2.0) * np.ravel(normalization.diagonal())
 
         rhs_n = np.zeros((dof, multiplicity))
 
@@ -70,7 +70,7 @@ def eigenpair_derivatives(
         for coeff, ind in _with_coefficients(multi_indices):
             rhs_n += coeff * (mass_mat_ds[ind[0]] @ eigenvector_derivatives[ind[1]] @ eigenvalue_derivatives[ind[2]])
 
-        rhs = np.vstack([rhs_n, diagonal_term])
+        rhs = np.vstack([rhs_n, np.diag(diagonal)])
 
         solution = solve_func(system_matrix, rhs)
 
