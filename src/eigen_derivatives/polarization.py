@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 
 from eigen_derivatives._types import Matrix
+from eigen_derivatives.backend import Backend, DenseBackend
 from eigen_derivatives.derivative_series import DerivativeSeries
 from eigen_derivatives.utils import (
     _bilinear_form, _multiindex_total_order, _multinomial_coefficient, _validate_mass_series,
@@ -66,7 +67,9 @@ def polarization_derivatives(
         eigenvector_ds: DerivativeSeries,
         init_polarization: np.ndarray,
         polarization_order: np.ndarray,
-        mass_mat_ds: DerivativeSeries | None = None
+        mass_mat_ds: DerivativeSeries | None = None,
+        *,
+        backend: Backend | None = None
 ) -> tuple[DerivativeSeries, DerivativeSeries]:
     """Return the polarization matrix derivatives and the polarized eigenvalue derivatives.
 
@@ -110,6 +113,8 @@ def polarization_derivatives(
     )
     determined = np.zeros((num_orders - 1, multiplicity), dtype=bool)
 
+    # not factorized: the system is multiplicity by multiplicity
+    backend = DenseBackend() if backend is None else backend
     lhs = -init_polarization.conj().T
 
     for k_eigval in range(1, num_orders):
@@ -130,7 +135,7 @@ def polarization_derivatives(
                 if k_ij < k_ii:
                     rhs[j] = _coefficient_builder(i, j, k_p, k_ij)
 
-            polarization_matrix_derivatives[k_p][:, i] = np.linalg.solve(lhs, rhs)
+            polarization_matrix_derivatives[k_p][:, i] = backend.solve(lhs, rhs)
 
             rhs_vec: np.ndarray = eigenvalue_ds[k_eigval] @ init_polarization[:, i]
             multi_indices = _multiindex_total_order(k_eigval, 2)
@@ -171,7 +176,7 @@ def polarization_derivatives(
                                 polarization_matrix_derivatives[ind[0]][:, i], inner
                             )
 
-            polarization_matrix_derivatives[k_p][:, i] = np.linalg.solve(lhs, rhs)
+            polarization_matrix_derivatives[k_p][:, i] = backend.solve(lhs, rhs)
             determined[k_p - 1, i] = True
 
     for order in range(1, num_orders):

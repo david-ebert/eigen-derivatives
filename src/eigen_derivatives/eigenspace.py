@@ -1,9 +1,9 @@
 import numpy as np
-import scipy.sparse as sp
 
+from eigen_derivatives.backend import Backend, get_backend
 from eigen_derivatives.derivative_series import DerivativeSeries
 from eigen_derivatives.utils import (
-    _bilinear_form, _multiindex_total_order, _validate_mass_series, _with_coefficients, _get_numeric_backend
+    _bilinear_form, _multiindex_total_order, _validate_mass_series, _with_coefficients
 )
 
 
@@ -11,19 +11,20 @@ def eigenpair_derivatives(
         eigenvalue: float,
         eigenvectors: np.ndarray,
         stiffness_mat_ds: DerivativeSeries,
-        mass_mat_ds: DerivativeSeries | None = None
+        mass_mat_ds: DerivativeSeries | None = None,
+        *,
+        backend: Backend | None = None
 ) -> tuple[DerivativeSeries, DerivativeSeries]:
     """Return the eigenpair derivatives with respect to the eigenspace."""
     dof, multiplicity = eigenvectors.shape
     num_orders = len(stiffness_mat_ds)
 
-    is_sparse_type = sp.issparse(stiffness_mat_ds[0])
-    to_matrix, block_func, solve_func, make_zero, make_eye = _get_numeric_backend(is_sparse_type)
+    backend = get_backend(stiffness_mat_ds[0]) if backend is None else backend
 
-    zero_block = make_zero(multiplicity, multiplicity)
+    zero_block = backend.zeros(multiplicity, multiplicity)
 
     if mass_mat_ds is None:
-        mass_mat_ds = DerivativeSeries((make_eye(dof),))
+        mass_mat_ds = DerivativeSeries((backend.eye(dof),))
     _validate_mass_series(mass_mat_ds, num_orders)
     has_mass_matrix_derivatives = len(mass_mat_ds) > 1
 
@@ -35,13 +36,16 @@ def eigenpair_derivatives(
             [eigenvectors] + [np.zeros((dof, multiplicity)) for _ in range(num_orders - 1)]
     )
 
-    northwest_tile = to_matrix(stiffness_mat_ds[0] - mass_mat_ds[0] * eigenvalue)
-    northeast_tile = to_matrix(-mass_mat_ds[0] @ eigenvector_derivatives[0])
+    northwest_tile = backend.as_matrix(stiffness_mat_ds[0] - mass_mat_ds[0] * eigenvalue)
+    northeast_tile = backend.as_matrix(-mass_mat_ds[0] @ eigenvector_derivatives[0])
 
-    system_matrix = block_func([
+    system_matrix = backend.block([
         [northwest_tile, northeast_tile],
         [northeast_tile.conj().T, zero_block]
     ])
+
+    # the system matrix is the same for every order, so it is factorized once
+    solve_system = backend.factorize(system_matrix)
 
     for k in range(1, num_orders):
         diagonal = np.zeros(multiplicity)
@@ -72,7 +76,7 @@ def eigenpair_derivatives(
 
         rhs = np.vstack([rhs_n, np.diag(diagonal)])
 
-        solution = solve_func(system_matrix, rhs)
+        solution = solve_system(rhs)
 
         eigenvector_derivatives[k] = solution[:dof]
         eigenvalue_derivatives[k] = solution[dof:]

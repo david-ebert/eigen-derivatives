@@ -2,29 +2,8 @@ import itertools
 from collections.abc import Iterator
 
 import numpy as np
-import scipy.sparse as sp
 
 from eigen_derivatives._types import Matrix
-
-
-def _get_numeric_backend(is_sparse: bool) -> tuple:
-    """Return the function bindings and matrix factories for a sparse or a dense backend."""
-    if is_sparse:
-        return (
-            sp.csc_array,
-            sp.block_array,
-            lambda system_matrix, rhs: sp.linalg.spsolve(system_matrix.tocsc(), rhs).reshape(np.shape(rhs)),
-            lambda rows, cols: sp.csc_array((rows, cols)),
-            lambda dim: sp.eye_array(dim, format="csc")
-        )
-
-    return (
-        np.asarray,
-        np.block,
-        np.linalg.solve,
-        lambda rows, cols: np.zeros((rows, cols)),
-        lambda dim: np.eye(dim)
-    )
 
 
 def _multiindex_total_order(total_order: int, length: int) -> np.ndarray:
