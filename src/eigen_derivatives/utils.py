@@ -1,5 +1,5 @@
 import itertools
-from collections.abc import Iterator
+from functools import cache
 
 import numpy as np
 
@@ -68,9 +68,19 @@ def _bilinear_form(
     return left.conj().T @ (middle @ right)
 
 
-def _with_coefficients(multi_indices: np.ndarray) -> Iterator[tuple[int, np.ndarray]]:
-    """Pair every multi-index with its coefficient, so the two cannot fall out of step."""
-    return zip(_multinomial_coefficient(multi_indices), multi_indices)
+@cache
+def _multiindex_with_coefficients(total_order: int, length: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return the multi-indices of a length and order together with their coefficients.
+
+    Callers mask the two arrays with the same mask, so index and coefficient cannot fall
+    out of step. Both are cached and therefore shared, which is why they are read-only.
+    The coefficients keep dtype object so that they stay exact integers of any size.
+    """
+    multi_indices = _multiindex_total_order(total_order, length)
+    coefficients = np.array(_multinomial_coefficient(multi_indices), dtype=object)
+    multi_indices.setflags(write=False)
+    coefficients.setflags(write=False)
+    return multi_indices, coefficients
 
 
 def group_eigenspace(eigenvalues: np.ndarray, *, tol: float = 1e-5) -> np.ndarray:

@@ -7,8 +7,8 @@ import scipy.sparse as sp
 from eigen_derivatives.utils import (
     _bilinear_form,
     _multiindex_total_order,
+    _multiindex_with_coefficients,
     _multinomial_coefficient,
-    _with_coefficients,
 )
 
 ORDERS = list(range(0, 9))
@@ -120,12 +120,39 @@ class TestBilinearForm:
             _bilinear_form(left, left, self.matrix)
 
 
-class TestWithCoefficients:
-    def test_every_row_is_paired_with_its_own_coefficient(self):
-        rows = _multiindex_total_order(4, 3)
-        expected = _multinomial_coefficient(rows)
-        pairs = list(_with_coefficients(rows))
-        assert len(pairs) == len(rows)
-        for (coefficient, multi_index), row, reference in zip(pairs, rows, expected, strict=True):
-            assert coefficient == reference
-            assert np.array_equal(multi_index, row)
+class TestMultiIndicesWithCoefficients:
+    @pytest.mark.parametrize("total_order", ORDERS, ids=lambda value: f"order {value}")
+    @pytest.mark.parametrize("length", LENGTHS, ids=lambda value: f"length {value}")
+    def test_every_row_is_paired_with_its_own_coefficient(self, total_order, length):
+        multi_indices, coefficients = _multiindex_with_coefficients(total_order, length)
+        assert np.array_equal(multi_indices, _multiindex_total_order(total_order, length))
+        assert list(coefficients) == _multinomial_coefficient(multi_indices)
+
+    def test_masking_both_arrays_keeps_the_pairing(self):
+        multi_indices, coefficients = _multiindex_with_coefficients(4, 3)
+        mask = multi_indices[:, 0] < 2
+        for coefficient, multi_index in zip(coefficients[mask], multi_indices[mask], strict=True):
+            assert coefficient == _multinomial_coefficient(np.array([multi_index]))[0]
+
+    def test_the_cached_arrays_are_read_only(self):
+        multi_indices, coefficients = _multiindex_with_coefficients(3, 2)
+        with pytest.raises(ValueError):
+            multi_indices[0, 0] = 99
+        with pytest.raises(ValueError):
+            coefficients[0] = 99
+
+    def test_the_same_arguments_return_the_same_objects(self):
+        first = _multiindex_with_coefficients(5, 3)
+        second = _multiindex_with_coefficients(5, 3)
+        assert first[0] is second[0]
+        assert first[1] is second[1]
+
+    def test_the_coefficients_stay_exact_beyond_the_integer_range(self):
+        # dtype object, so a coefficient larger than int64 is still exact
+        _, coefficients = _multiindex_with_coefficients(25, 2)
+        assert coefficients[12] == math.comb(25, 12)
+
+    def test_an_empty_enumeration_pairs_two_empty_arrays(self):
+        multi_indices, coefficients = _multiindex_with_coefficients(-1, 3)
+        assert multi_indices.shape == (0, 3)
+        assert coefficients.shape == (0,)

@@ -6,8 +6,8 @@ from eigen_derivatives._types import Matrix
 from eigen_derivatives.backend import Backend, DenseBackend
 from eigen_derivatives.derivative_series import DerivativeSeries
 from eigen_derivatives.utils import (
-    _bilinear_form, _multiindex_total_order, _multinomial_coefficient, _validate_mass_series,
-    _with_coefficients, group_eigenspace
+    _bilinear_form, _multiindex_with_coefficients, _multinomial_coefficient,
+    _validate_mass_series, group_eigenspace
 )
 
 
@@ -79,10 +79,10 @@ def polarization_derivatives(
 
     def _coefficient_builder(i: int, j: int, k_p: int, k_ij: int) -> float:
         accumulator = 0.0
-        multi_indices = _multiindex_total_order(k_p + k_ij, 2)
-        multi_indices = multi_indices[multi_indices[:, 0] >= k_ij]
+        multi_indices, coefficients = _multiindex_with_coefficients(k_p + k_ij, 2)
+        mask = multi_indices[:, 0] >= k_ij
 
-        for coeff, ind in _with_coefficients(multi_indices):
+        for coeff, ind in zip(coefficients[mask], multi_indices[mask]):
             mat_diff = eigenvalue_ds[ind[0]] - polarized_eigenvalue_derivatives[ind[0]][i] * np.eye(multiplicity)
             accumulator += coeff * _bilinear_form(
                 polarization_matrix_derivatives[0][:, j],
@@ -113,7 +113,8 @@ def polarization_derivatives(
     )
     determined = np.zeros((num_orders - 1, multiplicity), dtype=bool)
 
-    # not factorized: the system is multiplicity by multiplicity
+    # not factorized: the system is multiplicity by multiplicity, where one factorization
+    # plus lu_solve costs more Python overhead than solving each time, measured up to m = 20
     backend = DenseBackend() if backend is None else backend
     lhs = -init_polarization.conj().T
 
@@ -138,11 +139,9 @@ def polarization_derivatives(
             polarization_matrix_derivatives[k_p][:, i] = backend.solve(lhs, rhs)
 
             rhs_vec: np.ndarray = eigenvalue_ds[k_eigval] @ init_polarization[:, i]
-            multi_indices = _multiindex_total_order(k_eigval, 2)
-            multi_indices = multi_indices[
-                (multi_indices[:, 0] >= k_ii) & (multi_indices[:, 0] < k_eigval)
-                ]
-            for coeff, ind in _with_coefficients(multi_indices):
+            multi_indices, coefficients = _multiindex_with_coefficients(k_eigval, 2)
+            mask = (multi_indices[:, 0] >= k_ii) & (multi_indices[:, 0] < k_eigval)
+            for coeff, ind in zip(coefficients[mask], multi_indices[mask]):
                 polarization_column = polarization_matrix_derivatives[ind[1]][:, i]
                 rhs_vec += coeff * (
                         eigenvalue_ds[ind[0]] @ polarization_column
@@ -158,12 +157,11 @@ def polarization_derivatives(
                     if i != j:
                         rhs[j] = _coefficient_builder(i, j, k_p, k_ij)
                     else:
-                        multi_indices = _multiindex_total_order(k_p, 5)
+                        multi_indices, coefficients = _multiindex_with_coefficients(k_p, 5)
                         mask_norm = (multi_indices[:, 0] < k_p) & (multi_indices[:, 4] < k_p)
                         if not has_mass_matrix_derivatives:
                             mask_norm &= (multi_indices[:, 2] == 0)
-                        multi_indices = multi_indices[mask_norm]
-                        for coeff, ind in _with_coefficients(multi_indices):
+                        for coeff, ind in zip(coefficients[mask_norm], multi_indices[mask_norm]):
                             right = (
                                     eigenvector_ds[ind[3]]
                                     @ polarization_matrix_derivatives[ind[4]][:, i]
@@ -201,10 +199,10 @@ def polarized_eigenvectors(
     polarized_list = []
 
     for k in range(0, num_orders):
-        multi_indices = _multiindex_total_order(k, 2)
+        multi_indices, coefficients = _multiindex_with_coefficients(k, 2)
         polarized = np.zeros(eigenvector_shape)
 
-        for coeff, ind in _with_coefficients(multi_indices):
+        for coeff, ind in zip(coefficients, multi_indices):
             polarized += coeff * (eigenvector_ds[ind[0]] @ polarization_ds[ind[1]])
         polarized_list.append(polarized)
 

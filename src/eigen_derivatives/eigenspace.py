@@ -2,9 +2,7 @@ import numpy as np
 
 from eigen_derivatives.backend import Backend, get_backend
 from eigen_derivatives.derivative_series import DerivativeSeries
-from eigen_derivatives.utils import (
-    _bilinear_form, _multiindex_total_order, _validate_mass_series, _with_coefficients
-)
+from eigen_derivatives.utils import _bilinear_form, _multiindex_with_coefficients, _validate_mass_series
 
 
 def eigenpair_derivatives(
@@ -49,11 +47,11 @@ def eigenpair_derivatives(
 
     for k in range(1, num_orders):
         diagonal = np.zeros(multiplicity)
-        multi_indices = _multiindex_total_order(k, 3)
-        multi_indices = multi_indices[(multi_indices[:, 0] < k) & (multi_indices[:, 2] < k)]
+        multi_indices, coefficients = _multiindex_with_coefficients(k, 3)
+        mask = (multi_indices[:, 0] < k) & (multi_indices[:, 2] < k)
         if not has_mass_matrix_derivatives:
-            multi_indices = multi_indices[multi_indices[:, 1] == 0]
-        for coeff, ind in _with_coefficients(multi_indices):
+            mask &= multi_indices[:, 1] == 0
+        for coeff, ind in zip(coefficients[mask], multi_indices[mask]):
             normalization = _bilinear_form(
                 eigenvector_derivatives[ind[0]], eigenvector_derivatives[ind[2]],
                 middle=mass_mat_ds[ind[1]],
@@ -62,16 +60,16 @@ def eigenpair_derivatives(
 
         rhs_n = np.zeros((dof, multiplicity))
 
-        multi_indices = _multiindex_total_order(k, 2)
-        multi_indices = multi_indices[multi_indices[:, 1] < k]
-        for coeff, ind in _with_coefficients(multi_indices):
+        multi_indices, coefficients = _multiindex_with_coefficients(k, 2)
+        mask = multi_indices[:, 1] < k
+        for coeff, ind in zip(coefficients[mask], multi_indices[mask]):
             rhs_n += -coeff * (stiffness_mat_ds[ind[0]] @ eigenvector_derivatives[ind[1]])
 
-        multi_indices = _multiindex_total_order(k, 3)
-        multi_indices = multi_indices[(multi_indices[:, 1] < k) & (multi_indices[:, 2] < k)]
+        multi_indices, coefficients = _multiindex_with_coefficients(k, 3)
+        mask = (multi_indices[:, 1] < k) & (multi_indices[:, 2] < k)
         if not has_mass_matrix_derivatives:
-            multi_indices = multi_indices[multi_indices[:, 0] == 0]
-        for coeff, ind in _with_coefficients(multi_indices):
+            mask &= multi_indices[:, 0] == 0
+        for coeff, ind in zip(coefficients[mask], multi_indices[mask]):
             rhs_n += coeff * (mass_mat_ds[ind[0]] @ eigenvector_derivatives[ind[1]] @ eigenvalue_derivatives[ind[2]])
 
         rhs = np.vstack([rhs_n, np.diag(diagonal)])
